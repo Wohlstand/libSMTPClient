@@ -38,6 +38,7 @@
 #include <sys/time.h>
 #include <netdb.h>
 #include <stdarg.h>
+#include <libgen.h>
 #include <openssl/ssl.h>
 #include <openssl/bio.h>
 #include <openssl/err.h>
@@ -721,6 +722,7 @@ ssize_t smtp_attachFile(SMTP_Client *smtp, const char *filePath)
 {
     FILE *fp = NULL;
     ssize_t fileSize, base64Size, headerSize, len;
+    char *fileBaseName = NULL;
     char *attach = NULL, *base64Attach = NULL, *attachHeader = NULL;
     char fileName[MAX_EMAIL_LEN] = {0};
     const char *contentType     = "Content-Type: application/octet-stream";
@@ -750,15 +752,20 @@ ssize_t smtp_attachFile(SMTP_Client *smtp, const char *filePath)
 
     rewind(fp);
 
-    attach = calloc((size_t)fileSize, 1);
+    attach = (char*)calloc((size_t)fileSize, 1);
     if(NULL == attach)
     {
         smtp_printError(smtp, "[%s][%s]: Out of memory!", __FILE__, __LINE__);
         return -1;
     }
 
-    headerSize = (ssize_t)(strlen((const char*)contentType) + strlen(contentEncode) + strlen(contentDes) + 200);
-    attachHeader = calloc((size_t)headerSize, 1);
+    headerSize = (ssize_t)(strlen((const char*)contentType) +
+                           strlen(contentEncode) +
+                           strlen(contentDes) +
+                           (strlen(TEXT_BOUNDARY) * 2) +
+                           (strlen(fileName) * 2) +
+                           200);
+    attachHeader = (char*)calloc((size_t)headerSize, 1);
     if(NULL == attach)
     {
         smtp_printError(smtp, "Out of memory");
@@ -766,7 +773,9 @@ ssize_t smtp_attachFile(SMTP_Client *smtp, const char *filePath)
     }
 
     /* attachment header */
-    stringCut((const unsigned char*)filePath, (const unsigned char*)"/", NULL, (unsigned char*)fileName);
+    strcpy(fileName, filePath);
+    fileBaseName = basename(fileName);
+    strcpy(fileName, fileBaseName);
 
     sprintf(attachHeader,
             "--%s\r\n"
@@ -783,7 +792,7 @@ ssize_t smtp_attachFile(SMTP_Client *smtp, const char *filePath)
             fileName);
 
     base64Size = BASE64_SIZE(fileSize);
-    base64Attach = calloc((size_t)base64Size, 1);
+    base64Attach = (char*)calloc((size_t)base64Size, 1);
     if(NULL == base64Attach)
     {
         smtp_printError(smtp, "[%s][%s]: Out of memory!", __FILE__, __LINE__);
