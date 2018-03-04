@@ -43,7 +43,7 @@ struct SMTP_Private;
 typedef struct
 {
     /*! Internal private variables*/
-    struct SMTP_Private *private;
+    struct SMTP_Private *p;
     /*! Turn on debug print*/
     int debugPrint;
     /*! Output stream (file, stdout or stderr on your choice)*/

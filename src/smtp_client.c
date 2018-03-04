@@ -159,18 +159,18 @@ int smtp_init(SMTP_Client **smtp)
     *smtp = (SMTP_Client*)calloc(sizeof(SMTP_Client), 1);
     if(*smtp == NULL)
         return -1;
-    (*smtp)->private = calloc(sizeof(struct SMTP_Private), 1);
-    (*smtp)->private->mail = NULL;
-    (*smtp)->private->isLetterFinalized = 0;
-    (*smtp)->private->socketFd = 0;
+    (*smtp)->p = calloc(sizeof(struct SMTP_Private), 1);
+    (*smtp)->p->mail = NULL;
+    (*smtp)->p->isLetterFinalized = 0;
+    (*smtp)->p->socketFd = 0;
     (*smtp)->errorString = malloc(10240);
-    (*smtp)->private->attachmentIdSeed = 1000 + rand() % 99999;
+    (*smtp)->p->attachmentIdSeed = 1000 + rand() % 99999;
     (*smtp)->debugPrint = 0;
     (*smtp)->debugStream = stdout;
-    (*smtp)->private->mailFrom = malloc(MAX_EMAIL_LEN);
-    memset((*smtp)->private->mailFrom, 0, MAX_EMAIL_LEN);
-    (*smtp)->private->mailTo = malloc(MAX_EMAIL_LEN);
-    memset((*smtp)->private->mailTo, 0, MAX_EMAIL_LEN);
+    (*smtp)->p->mailFrom = malloc(MAX_EMAIL_LEN);
+    memset((*smtp)->p->mailFrom, 0, MAX_EMAIL_LEN);
+    (*smtp)->p->mailTo = malloc(MAX_EMAIL_LEN);
+    memset((*smtp)->p->mailTo, 0, MAX_EMAIL_LEN);
 
     SSL_library_init();
     ERR_load_BIO_strings();
@@ -185,22 +185,22 @@ int smtp_free(SMTP_Client **smtp)
 {
     if(smtp && *smtp)
     {
-        if((*smtp)->private->ssl)
-            SSL_free((*smtp)->private->ssl);
-        (*smtp)->private->ssl = NULL;
-        if((*smtp)->private->socketFd)
-            close((*smtp)->private->socketFd);
-        (*smtp)->private->socketFd = 0;
-        if((*smtp)->private->mail)
-            free((*smtp)->private->mail);
+        if((*smtp)->p->ssl)
+            SSL_free((*smtp)->p->ssl);
+        (*smtp)->p->ssl = NULL;
+        if((*smtp)->p->socketFd)
+            close((*smtp)->p->socketFd);
+        (*smtp)->p->socketFd = 0;
+        if((*smtp)->p->mail)
+            free((*smtp)->p->mail);
         if((*smtp)->errorString)
             free((*smtp)->errorString);
-        if((*smtp)->private->mailFrom)
-            free((*smtp)->private->mailFrom);
-        if((*smtp)->private->mailTo)
-            free((*smtp)->private->mailTo);
-        if((*smtp)->private)
-            free((*smtp)->private);
+        if((*smtp)->p->mailFrom)
+            free((*smtp)->p->mailFrom);
+        if((*smtp)->p->mailTo)
+            free((*smtp)->p->mailTo);
+        if((*smtp)->p)
+            free((*smtp)->p);
         free(*smtp);
         *smtp = NULL;
 
@@ -263,7 +263,7 @@ int smtp_connect(SMTP_Client *smtp, const char *smtpHostName, const unsigned sho
     struct sockaddr_in smtpAddr;
     struct hostent *host = NULL;
 
-    smtp->private->socketFd = -1;
+    smtp->p->socketFd = -1;
     memset(&smtpAddr, 0, sizeof(smtpAddr));
 
     if(NULL == (host = gethostbyname((const char*)smtpHostName)))
@@ -277,18 +277,18 @@ int smtp_connect(SMTP_Client *smtp, const char *smtpHostName, const unsigned sho
     smtpAddr.sin_port = htons(smtpPort);
     smtpAddr.sin_addr = *((struct in_addr *)host->h_addr);
 
-    smtp->private->socketFd = socket(PF_INET, SOCK_STREAM, 0);
-    if(0 > smtp->private->socketFd)
+    smtp->p->socketFd = socket(PF_INET, SOCK_STREAM, 0);
+    if(0 > smtp->p->socketFd)
     {
         smtp_printError(smtp, "Can't Initialize socket!");
-        smtp->private->socketFd = 0;
+        smtp->p->socketFd = 0;
         return -1;
     }
 
-    if(0 > connect(smtp->private->socketFd, (struct sockaddr *)&smtpAddr, sizeof(struct sockaddr)))
+    if(0 > connect(smtp->p->socketFd, (struct sockaddr *)&smtpAddr, sizeof(struct sockaddr)))
     {
-        close(smtp->private->socketFd);
-        smtp->private->socketFd = 0;
+        close(smtp->p->socketFd);
+        smtp->p->socketFd = 0;
         smtp_printError(smtp, "Can't connect to host %s:%u!", smtpHostName, smtpPort);
         return -1;
     }
@@ -301,28 +301,28 @@ int smtp_connect(SMTP_Client *smtp, const char *smtpHostName, const unsigned sho
 
         meth = TLSv1_2_client_method();
         ctx = SSL_CTX_new (meth);
-        smtp->private->ssl = SSL_new (ctx);
-        if (!smtp->private->ssl) {
+        smtp->p->ssl = SSL_new (ctx);
+        if (!smtp->p->ssl) {
             smtp_printSssError(smtp, "Error of SSL connection creation!\n");
-            close(smtp->private->socketFd);
+            close(smtp->p->socketFd);
             return -1;
         }
-        sock = SSL_get_fd(smtp->private->ssl);
-        SSL_set_fd(smtp->private->ssl, smtp->private->socketFd);
-        if(SSL_connect(smtp->private->ssl) < 0)
+        sock = SSL_get_fd(smtp->p->ssl);
+        SSL_set_fd(smtp->p->ssl, smtp->p->socketFd);
+        if(SSL_connect(smtp->p->ssl) < 0)
         {
             smtp_printSssError(smtp, "Error creating SSL connection!\n");
-            SSL_free(smtp->private->ssl);
-            smtp->private->ssl = NULL;
-            close(smtp->private->socketFd);
+            SSL_free(smtp->p->ssl);
+            smtp->p->ssl = NULL;
+            close(smtp->p->socketFd);
             return -1;
         }
     }
     else if(security == SMTP_TSL)
     {
         smtp_printSssError(smtp, "STARTTSL support is not implemented in this library. Yet!\n");
-        close(smtp->private->socketFd);
-        smtp->private->socketFd = 0;
+        close(smtp->p->socketFd);
+        smtp->p->socketFd = 0;
         return -1;
     }
 
@@ -331,8 +331,8 @@ int smtp_connect(SMTP_Client *smtp, const char *smtpHostName, const unsigned sho
 
 int smtp_close(SMTP_Client *smtp)
 {
-    int ret = close(smtp->private->socketFd);
-    smtp->private->socketFd = 0;
+    int ret = close(smtp->p->socketFd);
+    smtp->p->socketFd = 0;
     return ret;
 }
 
@@ -340,12 +340,12 @@ static int smtp_sslRecv(SMTP_Client *smtp, unsigned char* inbuf, size_t buf_size
 {
     int len;
     do {
-        len = SSL_read(smtp->private->ssl, inbuf, (int)buf_size);
+        len = SSL_read(smtp->p->ssl, inbuf, (int)buf_size);
         inbuf[len] = 0;
     } while (len > (int)buf_size);
 
     if (len < 0) {
-        int err = SSL_get_error(smtp->private->ssl, len);
+        int err = SSL_get_error(smtp->p->ssl, len);
         if (err == SSL_ERROR_WANT_READ)
             return 0;
         if (err == SSL_ERROR_WANT_WRITE)
@@ -359,9 +359,9 @@ static int smtp_sslRecv(SMTP_Client *smtp, unsigned char* inbuf, size_t buf_size
 
 static int smtp_sslSend(SMTP_Client *smtp, const unsigned char* outbuf, size_t buf_size)
 {
-    int len = SSL_write(smtp->private->ssl, outbuf, (int)buf_size);
+    int len = SSL_write(smtp->p->ssl, outbuf, (int)buf_size);
     if (len < 0) {
-        int err = SSL_get_error(smtp->private->ssl, len);
+        int err = SSL_get_error(smtp->p->ssl, len);
         switch (err) {
         case SSL_ERROR_WANT_WRITE:
             return 0;
@@ -398,19 +398,19 @@ static ssize_t smtp_sendData_real(const char *file, int line, SMTP_Client *smtp,
         fprintf(smtp->debugStream, "[%s][%d] OUT>>: %s\n", file, line, duped);
         free(duped);
     }
-    if(smtp->private->ssl)
+    if(smtp->p->ssl)
         return smtp_sslSend(smtp, data, size);
     else
-        return socketWrite(smtp->private->socketFd, data, size);
+        return socketWrite(smtp->p->socketFd, data, size);
 }
 
 static ssize_t smtp_recvData_real(const char *file, int line, SMTP_Client *smtp, unsigned char *data, size_t size)
 {
     ssize_t ret = 0;
-    if(smtp->private->ssl)
+    if(smtp->p->ssl)
         ret = smtp_sslRecv(smtp, data, size);
     else
-        ret = socketRead(smtp->private->socketFd, data, size);
+        ret = socketRead(smtp->p->socketFd, data, size);
     if(smtp->debugPrint)
     {
         char *duped = strdup((const char*)data);
@@ -546,19 +546,19 @@ int smtp_sendLetter(SMTP_Client *smtp)
     char readData[SMTP_MTU] = {0};
     char writeData[SMTP_MTU] = {0};
 
-    const unsigned char *textMail = smtp->private->mail;
-    size_t textLen = strlen((char*)smtp->private->mail);
+    const unsigned char *textMail = smtp->p->mail;
+    size_t textLen = strlen((char*)smtp->p->mail);
 
-    if(smtp->private->isLetterFinalized == 0)
+    if(smtp->p->isLetterFinalized == 0)
     {
         /* Fianlize letter whet it is not finalized! */
         smtp_endLetter(smtp);
-        textLen = strlen((char*)smtp->private->mail);
+        textLen = strlen((char*)smtp->p->mail);
     }
 
     /* Send: MAIL FROM */
     memset(&writeData, 0, SMTP_MTU);
-    sprintf(writeData, "MAIL FROM:<%s>\r\n", smtp->private->mailFrom);
+    sprintf(writeData, "MAIL FROM:<%s>\r\n", smtp->p->mailFrom);
     smtp_sendData(smtp, (const unsigned char*)writeData, strlen(writeData));
 
     /* Recv: MAIL FROM */
@@ -569,7 +569,7 @@ int smtp_sendLetter(SMTP_Client *smtp)
 
     /* Send: RCPT TO */
     memset(&writeData, 0, SMTP_MTU);
-    sprintf(writeData, "RCPT TO:<%s>\r\n", smtp->private->mailTo);
+    sprintf(writeData, "RCPT TO:<%s>\r\n", smtp->p->mailTo);
     smtp_sendData(smtp, (const unsigned char*)writeData, strlen(writeData));
 
     /* Recv: RCPT TO */
@@ -627,10 +627,10 @@ ssize_t smtp_createLetter(SMTP_Client *smtp,
     char *to_base64;
     char *subject_base64;
 
-    if(smtp->private->mail)
-        free(smtp->private->mail);
-    smtp->private->mail = calloc(1, 1);
-    smtp->private->isLetterFinalized = 0;
+    if(smtp->p->mail)
+        free(smtp->p->mail);
+    smtp->p->mail = calloc(1, 1);
+    smtp->p->isLetterFinalized = 0;
 
     if(fromMail == NULL)
     {
@@ -655,14 +655,14 @@ ssize_t smtp_createLetter(SMTP_Client *smtp,
     }
 
     memset(&fromName_g, 0, MAX_EMAIL_LEN);
-    strncpy(smtp->private->mailFrom, fromMail, MAX_EMAIL_LEN);
+    strncpy(smtp->p->mailFrom, fromMail, MAX_EMAIL_LEN);
     if(fromName)
         strncpy(fromName_g, fromName, MAX_EMAIL_LEN);
     else
         stringCut((const unsigned char*)fromMail, NULL, (const unsigned char*)"@", (unsigned char*)fromName_g);
 
     memset(&toName_g, 0, MAX_EMAIL_LEN);
-    strncpy(smtp->private->mailTo, toMail, MAX_EMAIL_LEN);
+    strncpy(smtp->p->mailTo, toMail, MAX_EMAIL_LEN);
     if(toName)
         strncpy(toName_g, toName, MAX_EMAIL_LEN);
     else
@@ -703,17 +703,17 @@ ssize_t smtp_createLetter(SMTP_Client *smtp,
     free(to_base64);
     free(subject_base64);
 
-    smtp->private->mail = realloc(smtp->private->mail, strlen((const char*)smtp->private->mail) + strlen(textOfLetter) + 1);
-    if(NULL == smtp->private->mail)
+    smtp->p->mail = realloc(smtp->p->mail, strlen((const char*)smtp->p->mail) + strlen(textOfLetter) + 1);
+    if(NULL == smtp->p->mail)
     {
         smtp_printError(smtp, "[%s][%s]: Out of memory!", __FILE__, __LINE__);
         return -1;
     }
 
-    strcat((char*)smtp->private->mail, textOfLetter);
+    strcat((char*)smtp->p->mail, textOfLetter);
 
     free(textOfLetter);
-    return (ssize_t)(mailTextLen - strlen((const char*)smtp->private->mail));
+    return (ssize_t)(mailTextLen - strlen((const char*)smtp->p->mail));
 }
 
 /* static attachmemt size */
@@ -727,7 +727,7 @@ ssize_t smtp_attachFile(SMTP_Client *smtp, const char *filePath)
     const char *contentEncode   = "Content-Transfer-Encoding: base64";
     const char *contentDes      = "Content-Disposition: attachment";
 
-    if(smtp->private->isLetterFinalized)
+    if(smtp->p->isLetterFinalized)
     {
         smtp_printError(smtp, "Can't attach file to finalized letter!");
         return -1;
@@ -778,7 +778,7 @@ ssize_t smtp_attachFile(SMTP_Client *smtp, const char *filePath)
             contentType,
             fileName,
             contentEncode,
-            (smtp->private->attachmentIdSeed)++,
+            (smtp->p->attachmentIdSeed)++,
             contentDes,
             fileName);
 
@@ -804,17 +804,17 @@ ssize_t smtp_attachFile(SMTP_Client *smtp, const char *filePath)
 
     free(attach);
 
-    smtp->private->mail = realloc(smtp->private->mail, strlen((const char*)smtp->private->mail) + (size_t)headerSize + (size_t)base64Size + 1);
-    if(NULL == smtp->private->mail)
+    smtp->p->mail = realloc(smtp->p->mail, strlen((const char*)smtp->p->mail) + (size_t)headerSize + (size_t)base64Size + 1);
+    if(NULL == smtp->p->mail)
     {
         smtp_printError(smtp, "[%s][%s]: Out of memory!", __FILE__, __LINE__);
         /* what should I do? */
         return -1;
     }
 
-    strcat((char*)smtp->private->mail, attachHeader);
-    strcat((char*)smtp->private->mail, base64Attach);
-    strcat((char*)smtp->private->mail, "\r\n");
+    strcat((char*)smtp->p->mail, attachHeader);
+    strcat((char*)smtp->p->mail, base64Attach);
+    strcat((char*)smtp->p->mail, "\r\n");
 
     free(attachHeader);
     free(base64Attach);
@@ -827,7 +827,7 @@ ssize_t smtp_endLetter(SMTP_Client *smtp)
     char bodyEnd[200] = {0};
     ssize_t len;
 
-    if(smtp->private->isLetterFinalized)
+    if(smtp->p->isLetterFinalized)
     {
         smtp_printError(smtp, "Letter is already finalized!");
         return -1;
@@ -838,16 +838,16 @@ ssize_t smtp_endLetter(SMTP_Client *smtp)
 
     len = (ssize_t)strlen(bodyEnd);
 
-    smtp->private->mail = realloc(smtp->private->mail, strlen((const char*)smtp->private->mail) + (size_t)len + 1);
-    if(NULL == smtp->private->mail)
+    smtp->p->mail = realloc(smtp->p->mail, strlen((const char*)smtp->p->mail) + (size_t)len + 1);
+    if(NULL == smtp->p->mail)
     {
         smtp_printError(smtp, "[%s][%s]: Out of memory!", __FILE__, __LINE__);
         return -1;
     }
 
-    strcat((char*)smtp->private->mail, bodyEnd);
+    strcat((char*)smtp->p->mail, bodyEnd);
 
-    smtp->private->isLetterFinalized = 1;
+    smtp->p->isLetterFinalized = 1;
 
     return 0;
 }
