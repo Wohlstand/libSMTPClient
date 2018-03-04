@@ -50,7 +50,7 @@ install(TARGETS ${SMTPCLIENT_INSTALLS}
         INCLUDES DESTINATION "include")
 
 install(FILES
-        include/smtp_client.h
+        src/smtp_client.h
         DESTINATION include
 )
 
