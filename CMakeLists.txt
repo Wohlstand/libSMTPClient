@@ -52,7 +52,9 @@ install(TARGETS ${SMTPCLIENT_INSTALLS}
         LIBRARY DESTINATION "lib"
         ARCHIVE DESTINATION "lib"
         FRAMEWORK DESTINATION "lib"
-        INCLUDES DESTINATION "include")
+        INCLUDES DESTINATION "include"
+        PUBLIC_HEADER DESTINATION "include"
+)
 
 install(FILES
         src/smtp_client.h
