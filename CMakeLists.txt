@@ -10,6 +10,11 @@ option(SMTP_BUILD_EXAMPLE "Build sample program" OFF)
 
 link_directories(${CMAKE_BINARY_DIR}/lib)
 
+set(CMAKE_DEBUG_POSTFIX             "d")
+set(CMAKE_RELEASE_POSTFIX           "")
+set(CMAKE_RELWITHDEBINFO_POSTFIX    "")
+set(CMAKE_MINSIZEREL_POSTFIX "")
+
 set(SMTPCLIENT_INSTALLS)
 
 if(SMTP_CLIENT_STATIC)
