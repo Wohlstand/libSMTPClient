@@ -669,8 +669,8 @@ ssize_t smtp_createLetter(SMTP_Client *smtp,
     else
         stringCut((const unsigned char*)toMail, NULL, (const unsigned char*)"@", (unsigned char*)toName_g);
 
-    from_base64     = strdup_as_base64(fromName);
-    to_base64       = strdup_as_base64(toName);
+    from_base64     = strdup_as_base64(fromName_g);
+    to_base64       = strdup_as_base64(toName_g);
     subject_base64  = strdup_as_base64((const char*)mailSubject);
 
     snprintf(textOfLetter, mailTextLen,
