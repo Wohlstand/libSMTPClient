@@ -1,7 +1,7 @@
 ﻿/*
  * Simplle SMTP Client - a simple C library to send mail by SMTP protocol
  *
- * Copyright (c) 2018-2025 Vitaliy Novichkov <admin@wohlnet.ru>
+ * Copyright (c) 2018-2026 Vitaliy Novichkov <admin@wohlnet.ru>
  *
  * Permission is hereby granted, free of charge, to any person obtaining
  * a copy of this software and associated documentation files (the "Software"),
